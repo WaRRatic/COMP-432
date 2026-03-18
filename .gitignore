@@ -1,0 +1,33 @@
+/*
+!/.gitignore
+!/README.md
+!/requirements.txt
+!/Project/
+
+/Project/*
+!/Project/Project Documentation.md
+!/Project/scripts/
+!/Project/src/
+!/Project/VdM Data/
+
+/Project/scripts/*
+!/Project/scripts/build_subset.py
+
+/Project/src/*
+!/Project/src/montreal311_project/
+
+/Project/src/montreal311_project/*
+!/Project/src/montreal311_project/__init__.py
+!/Project/src/montreal311_project/paths.py
+!/Project/src/montreal311_project/data.py
+!/Project/src/montreal311_project/sampling.py
+!/Project/src/montreal311_project/splits.py
+
+/Project/VdM Data/*
+!/Project/VdM Data/requetes311_2019-2021.csv
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
