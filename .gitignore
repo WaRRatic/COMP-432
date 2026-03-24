@@ -12,6 +12,7 @@
 
 /Project/scripts/*
 !/Project/scripts/build_subset.py
+!/Project/scripts/train_classification.py
 
 /Project/src/*
 !/Project/src/montreal311_project/
@@ -20,6 +21,9 @@
 !/Project/src/montreal311_project/__init__.py
 !/Project/src/montreal311_project/paths.py
 !/Project/src/montreal311_project/data.py
+!/Project/src/montreal311_project/preprocessing.py
+!/Project/src/montreal311_project/modeling.py
+!/Project/src/montreal311_project/evaluation.py
 !/Project/src/montreal311_project/sampling.py
 !/Project/src/montreal311_project/splits.py
 
