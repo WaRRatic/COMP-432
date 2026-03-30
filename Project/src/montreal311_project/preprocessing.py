@@ -9,7 +9,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import FunctionTransformer
 
 # main categorical fields for the first classification baseline
-# They are all available when the request is created, so they do not leak future information.
+# (available at request creation not to leak future info)
 SPARSE_CATEGORICAL_COLUMNS = [
     "TYPE_LIEU_INTERV",
     "ARRONDISSEMENT",
@@ -18,64 +18,121 @@ SPARSE_CATEGORICAL_COLUMNS = [
     "PROVENANCE_ORIGINALE",
 ]
 
+# Simple numeric features available at request creation time for regression
+NUMERIC_BASELINE_COLUMNS = [
+    "creation_year",
+    "creation_month",
+    "creation_dayofweek",
+    "creation_hour",
+    "has_geo",
+]
+
 def extract_text_feature(values: pd.DataFrame | pd.Series | np.ndarray) -> np.ndarray:
-    # TfidfVectorizer expects a simple 1D sequence of strings.
+    # normalizing into a text column and filling missing values with empty strings
     if isinstance(values, pd.DataFrame):
         series = values.iloc[:, 0]
     elif isinstance(values, pd.Series):
         series = values
     else:
-        # ColumnTransformer can also pass numpy arrays depending on the pipeline step.
+        # converts to series if input is a numpt array 
         array = np.asarray(values)
         if array.ndim == 2:
             array = array[:, 0]
         series = pd.Series(array)
 
-    # Replace missing text with empty strings before vectorization.
+    # Replace missing text with empty strings before vectorization
     return series.fillna("").astype(str).to_numpy()
 
 def build_sparse_preprocessor() -> ColumnTransformer:
     """Build the first text-and-category feature view for classification."""
 
-    # Convert the activity name into TF-IDF text features.
+    # Convert the activity name into TF-IDF text features for learning
     text_pipeline = Pipeline(
         steps=[
             ("extract_text", FunctionTransformer(extract_text_feature, validate=False)),
             (
                 "tfidf",
                 TfidfVectorizer(
-                    # Keep the vocabulary size manageable for a first baseline.
+                    # ocabulary size manageable for first baseline
                     max_features=4_000,
-                    # Ignore very rare terms that are unlikely to help the first model.
+                    # ignoring rare words that don't generalize well
                     min_df=5,
-                    # Use single words and short phrases.
+                    # Using single words and short phrases
                     ngram_range=(1, 2),
                 ),
             ),
         ]
     )
 
-    # Fill missing category values, then one-hot encode them for the classifier.
+    # Filling missing category values, one-hot encoding for classifier
     categorical_pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
             (
                 "one_hot",
                 OneHotEncoder(
-                    # Ignore category values that only appear later at validation/test time.
+                    # Ignore category values from the rest of the data
                     handle_unknown="ignore",
-                    # Group very rare categories together to keep the feature space smaller.
+                    # Grouping very rare categories together to keep the feature space smaller
+                    min_frequency=20,
+                ),
+            ),
+        ]
+    )
+    # Combine text features and categorical features into one model input matrix
+    return ColumnTransformer(
+        transformers=[
+            ("text", text_pipeline, ["ACTI_NOM"]),
+            ("categorical", categorical_pipeline, SPARSE_CATEGORICAL_COLUMNS),
+        ],
+        sparse_threshold=0.3,
+    )
+
+def build_regression_preprocessor() -> ColumnTransformer:
+    """Build the first regression feature view from creation-time columns."""
+
+    # Reuse the request text as TF-IDF features for the regression baseline
+    text_pipeline = Pipeline(
+        steps=[
+            ("extract_text", FunctionTransformer(extract_text_feature, validate=False)),
+            (
+                "tfidf",
+                TfidfVectorizer(
+                    max_features=4_000,
+                    min_df=5,
+                    ngram_range=(1, 2),
+                ),
+            ),
+        ]
+    )
+
+    # One-hot encode simple categorical fields known when the request is created
+    categorical_pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
+            (
+                "one_hot",
+                OneHotEncoder(
+                    handle_unknown="ignore",
                     min_frequency=20,
                 ),
             ),
         ]
     )
 
-    # Combine the text features and categorical features into one model input matrix.
+    # Fill missing numeric creation-time values before regression
+    numeric_pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+        ]
+    )
+
+    # Combine text, categorical, and numeric features into one model input matrix
     return ColumnTransformer(
         transformers=[
             ("text", text_pipeline, ["ACTI_NOM"]),
             ("categorical", categorical_pipeline, SPARSE_CATEGORICAL_COLUMNS),
+            ("numeric", numeric_pipeline, NUMERIC_BASELINE_COLUMNS),
         ],
         sparse_threshold=0.3,
     )
