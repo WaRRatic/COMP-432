@@ -1,9 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
+import numpy as np
 from sklearn.dummy import DummyClassifier
 # Simple regression reference model
 from sklearn.dummy import DummyRegressor
+from sklearn.compose import TransformedTargetRegressor
+# First linear regression baselines with regularization
+from sklearn.linear_model import ElasticNet
 # First linear regression baseline with regularization
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LogisticRegression
@@ -16,6 +20,22 @@ class ModelSpec:
     name: str
     feature_view: str
     build_estimator: Callable[[], object]
+
+def build_stabilized_regression_estimator(regressor: object) -> TransformedTargetRegressor:
+    """Wrap a regression pipeline with a simple training-only log target transform."""
+    return TransformedTargetRegressor(
+        # same feature pipeline, but fitting the linear model on log1p(days)
+        regressor=Pipeline(
+            steps=[
+                ("preprocessor", build_regression_preprocessor()),
+                ("model", regressor),
+            ]
+        ),
+        # Compressing very long resolution times so the linear baselines are more stable
+        func=np.log1p,
+        # Convert predictions back to the original unit (days)
+        inverse_func=np.expm1,
+    )
 
 def build_classification_models() -> list[ModelSpec]:
     """Return the classification baselines for the second project commit."""
@@ -50,7 +70,7 @@ def build_classification_models() -> list[ModelSpec]:
     ]
 
 def build_regression_models() -> list[ModelSpec]:
-    """Return the regression baselines for the next project commit."""
+    """Return the regression baselines for the fourth project commit."""
     return [
         ModelSpec(
             # Reference point: always predicts the training-set average
@@ -59,19 +79,21 @@ def build_regression_models() -> list[ModelSpec]:
             build_estimator=lambda: DummyRegressor(strategy="mean"),
         ),
         ModelSpec(
-            # First regression baseline using text/categories/numeric features
+            # First regression baseline using a stabilized target and linear features
             name="ridge_sparse_combined",
             feature_view="text_categorical_numeric",
-            build_estimator=lambda: Pipeline(
-                steps=[
-                    # Turninng raw dataframe columns into model-ready features
-                    ("preprocessor", build_regression_preprocessor()),
-                    (
-                        "model",
-                        # Ridge regression baseline
-                        Ridge(alpha=1.0),
-                    ),
-                ]
+            build_estimator=lambda: build_stabilized_regression_estimator(
+                # ridge baseline is original, but training it on the stabilized target
+                Ridge(alpha=1.0)
+            ),
+        ),
+        ModelSpec(
+            # Slightly stronger sparse linear baseline with l1/l2 regularization
+            name="elasticnet_sparse_combined",
+            feature_view="text_categorical_numeric",
+            build_estimator=lambda: build_stabilized_regression_estimator(
+                # Small regularized upgrade after ridge without changing the feature set
+                ElasticNet(alpha=0.0005, l1_ratio=0.5, max_iter=5_000, random_state=42)
             ),
         ),
     ]
