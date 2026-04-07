@@ -6,12 +6,14 @@ from sklearn.dummy import DummyClassifier
 # Simple regression reference model
 from sklearn.dummy import DummyRegressor
 from sklearn.compose import TransformedTargetRegressor
+from sklearn.calibration import CalibratedClassifierCV
 # First linear regression baselines with regularization
 from sklearn.linear_model import ElasticNet
 # First linear regression baseline with regularization
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
 from .preprocessing import build_regression_preprocessor, build_sparse_preprocessor
 
 @dataclass(frozen=True)
@@ -37,8 +39,23 @@ def build_stabilized_regression_estimator(regressor: object) -> TransformedTarge
         inverse_func=np.expm1,
     )
 
+def build_calibrated_linear_svc_estimator() -> Pipeline:
+    """Build a calibrated linear SVM classifier on the existing sparse feature view."""
+    return Pipeline(
+        steps=[
+            ("preprocessor", build_sparse_preprocessor()),
+            (
+                "model",
+                CalibratedClassifierCV(
+                    estimator=LinearSVC(class_weight="balanced", random_state=42),
+                    cv=3,
+                ),
+            ),
+        ]
+    )
+
 def build_classification_models() -> list[ModelSpec]:
-    """Return the classification baselines for the second project commit."""
+    """Return the classification baselines available in the current project stage."""
     return [
         ModelSpec(
             # reference point  for model performance (predicting the most common class)
@@ -49,7 +66,7 @@ def build_classification_models() -> list[ModelSpec]:
         ModelSpec(
             # first baseline: preprocess text/categories, train logistic regression.
             name="logistic_sparse_combined",
-            feature_view="text_categorical",
+            feature_view="text_categorical_numeric",
             build_estimator=lambda: Pipeline(
                 steps=[
                     # raw dataframe columns into model-ready features
@@ -66,6 +83,11 @@ def build_classification_models() -> list[ModelSpec]:
                     ),
                 ]
             ),
+        ),
+        ModelSpec(
+            name="linear_svc_calibrated_sparse",
+            feature_view="text_categorical_numeric",
+            build_estimator=build_calibrated_linear_svc_estimator,
         ),
     ]
 

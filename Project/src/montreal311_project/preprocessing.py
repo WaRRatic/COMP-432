@@ -18,7 +18,7 @@ SPARSE_CATEGORICAL_COLUMNS = [
     "PROVENANCE_ORIGINALE",
 ]
 
-# Simple numeric features available at request creation time for regression
+# simple numeric features available at request creation time for both tasks
 NUMERIC_BASELINE_COLUMNS = [
     "creation_year",
     "creation_month",
@@ -44,7 +44,7 @@ def extract_text_feature(values: pd.DataFrame | pd.Series | np.ndarray) -> np.nd
     return series.fillna("").astype(str).to_numpy()
 
 def build_sparse_preprocessor() -> ColumnTransformer:
-    """Build the first text-and-category feature view for classification."""
+    """Build the current sparse classification feature view."""
 
     # Convert the activity name into TF-IDF text features for learning
     text_pipeline = Pipeline(
@@ -79,19 +79,26 @@ def build_sparse_preprocessor() -> ColumnTransformer:
             ),
         ]
     )
-    # Combine text features and categorical features into one model input matrix
+
+    numeric_pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+        ]
+    )
+
+    # Combine text, categorical, and simple creation-time numeric features
     return ColumnTransformer(
         transformers=[
             ("text", text_pipeline, ["ACTI_NOM"]),
             ("categorical", categorical_pipeline, SPARSE_CATEGORICAL_COLUMNS),
+            ("numeric", numeric_pipeline, NUMERIC_BASELINE_COLUMNS),
         ],
         sparse_threshold=0.3,
     )
 
 def build_regression_preprocessor() -> ColumnTransformer:
     """Build the first regression feature view from creation-time columns."""
-
-    # Reuse the request text as TF-IDF features for the regression baseline
+    # Reuse the request text as TF-IDF features for the reg baseline
     text_pipeline = Pipeline(
         steps=[
             ("extract_text", FunctionTransformer(extract_text_feature, validate=False)),
@@ -106,7 +113,7 @@ def build_regression_preprocessor() -> ColumnTransformer:
         ]
     )
 
-    # One-hot encode simple categorical fields known when the request is created
+    # One-hot encode categorical fields 
     categorical_pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
@@ -120,14 +127,14 @@ def build_regression_preprocessor() -> ColumnTransformer:
         ]
     )
 
-    # Fill missing numeric creation-time values before regression
+    # Filling missing numeric creation-time values before regression
     numeric_pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
         ]
     )
 
-    # Combine text, categorical, and numeric features into one model input matrix
+    # Combine text/categorical/numeric features into one model input matrix
     return ColumnTransformer(
         transformers=[
             ("text", text_pipeline, ["ACTI_NOM"]),

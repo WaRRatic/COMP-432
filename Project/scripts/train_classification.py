@@ -19,6 +19,7 @@ from montreal311_project.data import load_requests, prepare_classification_frame
 
 # Evaluation helpers to score models and save outputs
 from montreal311_project.evaluation import (
+    classification_report_table,
     classification_metrics,
     confidence_reliability_table,
     save_json,
@@ -35,14 +36,11 @@ from montreal311_project.splits import split_by_time
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for classification training.
-
     Args:
         None.
-
     Returns:
         argparse.Namespace: Parsed options for input data, output directory,
         split dates, and optional row limit.
-
     Example:
         >>> args = parse_args()
     """
@@ -71,14 +69,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     """Train, compare, and save the current classification baselines.
-
     Args:
         None.
-
     Returns:
         None. The function writes model comparison outputs, a JSON summary,
         an optional reliability table, and the best fitted model to disk.
-
     Example:
         >>> main()
     """
@@ -111,7 +106,7 @@ def main() -> None:
             estimator.fit(train[feature_columns], train["NATURE_TARGET"])
             validation_pred = estimator.predict(validation[feature_columns])
             if hasattr(estimator, "predict_proba"):
-                # Reliability metrics only apply to models that expose probabilities.
+                # Reliability metrics (models that expose probabilities)
                 validation_proba = estimator.predict_proba(validation[feature_columns])
             else:
                 validation_proba = None
@@ -123,6 +118,7 @@ def main() -> None:
                 labels=labels,
             )
 
+            # summary for current model saved
             result_row = {
                 "model": spec.name,
                 "feature_view": spec.feature_view,
@@ -132,6 +128,7 @@ def main() -> None:
                 result_row[f"validation_{key}"] = value
             results.append(result_row)
 
+            # choosing best validation macro-F1 score
             if validation_metrics["macro_f1"] > best_macro_f1:
                 best_macro_f1 = validation_metrics["macro_f1"]
                 best_name = spec.name
@@ -172,12 +169,14 @@ def main() -> None:
     else:
         final_test_proba = None
 
+    # Computing final test metrics for selected model
     final_test_metrics = classification_metrics(
         test["NATURE_TARGET"],
         final_test_pred,
         probabilities=final_test_proba,
         labels=final_labels,
     )
+    # summary of the run
     summary: dict[str, object] = {
         "best_model": best_name,
         "labels": final_labels,
@@ -189,8 +188,15 @@ def main() -> None:
 
     save_json(summary, args.output_dir / "summary.json")
 
+    class_report = classification_report_table(
+        test["NATURE_TARGET"],
+        final_test_pred,
+        final_labels,
+    )
+    class_report.to_csv(args.output_dir / "best_model_class_report.csv", index=False)
+
     if final_test_proba is not None:
-        # Save one lightweight reliability artifact for the best classifier.
+        # Saving a reliability artifact for the best classifier
         reliability = confidence_reliability_table(
             test["NATURE_TARGET"],
             final_test_proba,
