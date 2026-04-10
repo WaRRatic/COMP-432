@@ -21,7 +21,9 @@ from montreal311_project.data import load_requests, prepare_classification_frame
 from montreal311_project.evaluation import (
     classification_report_table,
     classification_metrics,
+    confusion_matrix_table,
     confidence_reliability_table,
+    grouped_classification_metrics_table,
     save_json,
 )
 
@@ -194,6 +196,29 @@ def main() -> None:
         final_labels,
     )
     class_report.to_csv(args.output_dir / "best_model_class_report.csv", index=False)
+
+    confusion_table = confusion_matrix_table(
+        test["NATURE_TARGET"],
+        final_test_pred,
+        final_labels,
+    )
+    confusion_table.to_csv(args.output_dir / "best_model_confusion_matrix.csv", index=True)
+
+    by_month = grouped_classification_metrics_table(
+        test["creation_month"],
+        test["NATURE_TARGET"],
+        final_test_pred,
+        final_labels,
+    )
+    by_month.to_csv(args.output_dir / "best_model_by_month.csv", index=False)
+
+    by_borough = grouped_classification_metrics_table(
+        test["ARRONDISSEMENT"],
+        test["NATURE_TARGET"],
+        final_test_pred,
+        final_labels,
+    )
+    by_borough.to_csv(args.output_dir / "best_model_by_borough.csv", index=False)
 
     if final_test_proba is not None:
         # Saving a reliability artifact for the best classifier

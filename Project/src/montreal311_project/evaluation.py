@@ -6,6 +6,7 @@ import pandas as pd
 
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
     f1_score,
     mean_absolute_error,
     mean_squared_error,
@@ -148,6 +149,54 @@ def classification_report_table(
                 "recall": float(recall[index]),
                 "f1": float(f1[index]),
                 "support": int(support[index]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+def confusion_matrix_table(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    labels: list[str],
+) -> pd.DataFrame:
+    """Build a labeled confusion-matrix table for classification results"""
+    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    return pd.DataFrame(matrix, index=labels, columns=labels)
+
+def grouped_classification_metrics_table(
+    groups: pd.Series,
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    labels: list[str],
+    min_count: int = 50,
+) -> pd.DataFrame:
+    """Build a small grouped accuracy and macro-F1 summary table."""
+    grouped_frame = pd.DataFrame(
+        {
+            "group": groups,
+            "y_true": y_true,
+            "y_pred": y_pred,
+        }
+    ).dropna(subset=["group"])
+    rows: list[dict[str, float | int | str]] = []
+    for group_value, group_frame in grouped_frame.groupby("group"):
+        if len(group_frame) < min_count:
+            continue
+        rows.append(
+            {
+                "group": str(group_value),
+                "count": int(len(group_frame)),
+                "accuracy": float(
+                    accuracy_score(group_frame["y_true"], group_frame["y_pred"])
+                ),
+                "macro_f1": float(
+                    f1_score(
+                        group_frame["y_true"],
+                        group_frame["y_pred"],
+                        labels=labels,
+                        average="macro",
+                        zero_division=0,
+                    )
+                ),
             }
         )
     return pd.DataFrame(rows)
