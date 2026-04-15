@@ -24,6 +24,7 @@ from montreal311_project.evaluation import (
     confusion_matrix_table,
     confidence_reliability_table,
     grouped_classification_metrics_table,
+    linear_feature_contribution_table,
     save_json,
 )
 
@@ -228,6 +229,13 @@ def main() -> None:
             final_labels,
         )
         reliability.to_csv(args.output_dir / "best_model_reliability.csv", index=False)
+
+    feature_contributions = linear_feature_contribution_table(best_estimator)
+    if not feature_contributions.empty:
+        feature_contributions.to_csv(
+            args.output_dir / "best_model_feature_contributions.csv",
+            index=False,
+        )
 
     joblib.dump(best_estimator, args.output_dir / "best_model.joblib")
 

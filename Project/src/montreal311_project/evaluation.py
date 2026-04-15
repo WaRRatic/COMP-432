@@ -3,6 +3,10 @@ import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import TransformedTargetRegressor
 
 from sklearn.metrics import (
     accuracy_score,
@@ -200,6 +204,114 @@ def grouped_classification_metrics_table(
             }
         )
     return pd.DataFrame(rows)
+
+def linear_feature_contribution_table(
+    estimator: object,
+    top_n: int = 20,
+) -> pd.DataFrame:
+    """Build a small top-coefficient table for fitted linear models."""
+    preprocessor, coefficients, groups = _extract_linear_model_parts(estimator)
+    if preprocessor is None or coefficients is None:
+        return pd.DataFrame()
+
+    feature_names = _get_preprocessor_feature_names(preprocessor)
+    if not feature_names:
+        return pd.DataFrame()
+
+    coefficient_matrix = np.asarray(coefficients, dtype=float)
+    if coefficient_matrix.ndim == 1:
+        coefficient_matrix = coefficient_matrix.reshape(1, -1)
+
+    if coefficient_matrix.shape[1] != len(feature_names):
+        return pd.DataFrame()
+
+    if groups is None:
+        groups = ["target"]
+
+    rows: list[dict[str, float | int | str]] = []
+    for group_name, coefficient_row in zip(groups, coefficient_matrix):
+        ranked_indices = np.argsort(np.abs(coefficient_row))[::-1][:top_n]
+        for rank, feature_index in enumerate(ranked_indices, start=1):
+            coefficient = float(coefficient_row[feature_index])
+            rows.append(
+                {
+                    "group": str(group_name),
+                    "rank": int(rank),
+                    "feature": feature_names[feature_index],
+                    "coefficient": coefficient,
+                    "abs_coefficient": float(abs(coefficient)),
+                    "direction": "positive" if coefficient >= 0.0 else "negative",
+                }
+            )
+    return pd.DataFrame(rows)
+
+def _extract_linear_model_parts(
+    estimator: object,
+) -> tuple[ColumnTransformer | None, np.ndarray | None, list[str] | None]:
+    """Return preprocessor, coefficients, and group labels for a fitted linear model."""
+    if isinstance(estimator, Pipeline):
+        preprocessor = estimator.named_steps.get("preprocessor")
+        model = estimator.named_steps.get("model")
+        coefficients = _extract_classifier_coefficients(model)
+        groups = _extract_model_groups(model)
+        if isinstance(preprocessor, ColumnTransformer) and coefficients is not None:
+            return preprocessor, coefficients, groups
+
+    if isinstance(estimator, TransformedTargetRegressor):
+        regressor = getattr(estimator, "regressor_", None)
+        if isinstance(regressor, Pipeline):
+            preprocessor = regressor.named_steps.get("preprocessor")
+            model = regressor.named_steps.get("model")
+            coefficients = getattr(model, "coef_", None)
+            if isinstance(preprocessor, ColumnTransformer) and coefficients is not None:
+                return preprocessor, np.asarray(coefficients, dtype=float), ["target"]
+
+    return None, None, None
+
+def _extract_classifier_coefficients(model: object) -> np.ndarray | None:
+    """Return linear classification coefficients when the fitted model exposes them."""
+    if model is None:
+        return None
+    if hasattr(model, "coef_"):
+        return np.asarray(model.coef_, dtype=float)
+    if isinstance(model, CalibratedClassifierCV):
+        coefficient_rows: list[np.ndarray] = []
+        for calibrated in getattr(model, "calibrated_classifiers_", []):
+            base_estimator = getattr(calibrated, "estimator", None)
+            if base_estimator is not None and hasattr(base_estimator, "coef_"):
+                coefficient_rows.append(np.asarray(base_estimator.coef_, dtype=float))
+        if coefficient_rows:
+            return np.mean(np.stack(coefficient_rows, axis=0), axis=0)
+    return None
+
+def _extract_model_groups(model: object) -> list[str] | None:
+    """Return the group labels that match the coefficient rows."""
+    if model is None:
+        return None
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        return None
+    return [str(label) for label in classes]
+
+def _get_preprocessor_feature_names(preprocessor: ColumnTransformer) -> list[str]:
+    """Return feature names from the current column-transformer pipelines."""
+    feature_names: list[str] = []
+    for transformer_name, transformer, columns in preprocessor.transformers_:
+        if transformer == "drop":
+            continue
+        if transformer_name == "text":
+            tfidf = transformer.named_steps["tfidf"]
+            feature_names.extend(
+                [f"{transformer_name}__{name}" for name in tfidf.get_feature_names_out()]
+            )
+            continue
+        if transformer_name == "categorical":
+            one_hot = transformer.named_steps["one_hot"]
+            feature_names.extend(one_hot.get_feature_names_out(columns).tolist())
+            continue
+        if transformer_name == "numeric":
+            feature_names.extend([str(column) for column in columns])
+    return feature_names
 
 def save_json(payload: dict[str, object], output_path: Path) -> None:
     """Write a JSON payload to disk for a training run.
