@@ -2,12 +2,10 @@ from __future__ import annotations
 import heapq
 import json
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
-from .data import prepare_base_frame
-
+from .data import prepare_base_frame, read_raw_csv_kwargs
 
 def _trim_chunk_for_debug(
     chunk: pd.DataFrame,
@@ -23,7 +21,6 @@ def _trim_chunk_for_debug(
     if len(chunk) > remaining:
         return chunk.iloc[:remaining].copy()
     return chunk
-
 
 def _prepare_sampling_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
     prepared = prepare_base_frame(chunk)
@@ -102,6 +99,7 @@ def build_representative_subset_from_csv(
     chunk_size: int = 50_000,
     max_rows: int | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Build a representative chronological subset from the raw Montreal 311 CSV."""
     # Pass 1: count valid rows by (month, normalized nature)
     usecols = ["NATURE", "DDS_DATE_CREATION"]
     counts_map: dict[tuple[str, str], int] = {}
@@ -111,8 +109,7 @@ def build_representative_subset_from_csv(
         csv_path,
         usecols=usecols,
         chunksize=chunk_size,
-        low_memory=False,
-        encoding_errors="replace",
+        **read_raw_csv_kwargs(),
     ):
         # `max_rows` is only for debugging small runs. real sampling should scan the whole file
         chunk = _trim_chunk_for_debug(chunk, rows_seen, max_rows)
@@ -139,8 +136,7 @@ def build_representative_subset_from_csv(
         csv_path,
         usecols=usecols,
         chunksize=chunk_size,
-        low_memory=False,
-        encoding_errors="replace",
+        **read_raw_csv_kwargs(),
     ):
         # Apply the same optional debug cap during the row-selection pass
         chunk = _trim_chunk_for_debug(chunk, row_offset, max_rows)
@@ -180,8 +176,7 @@ def build_representative_subset_from_csv(
     for chunk in pd.read_csv(
         csv_path,
         chunksize=chunk_size,
-        low_memory=False,
-        encoding_errors="replace",
+        **read_raw_csv_kwargs(),
     ):
         # Apply the same optional cap while recovering the final rows
         chunk = _trim_chunk_for_debug(chunk, row_offset, max_rows)

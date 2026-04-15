@@ -1,11 +1,10 @@
 from __future__ import annotations
 import unicodedata
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
-# Group columns by role so the cleaning step is easier to follow.
+# Source columns grouped by role
 PROVENANCE_COLUMNS = [
     "PROVENANCE_TELEPHONE",
     "PROVENANCE_COURRIEL",
@@ -35,7 +34,7 @@ STRING_COLUMNS = [
     "DERNIER_STATUT",
 ]
 
-# Normalize the labels we will later use as targets.
+# Normalizing targets
 CANONICAL_NATURES = {
     "information": "Information",
     "commentaire": "Commentaire",
@@ -50,21 +49,20 @@ CANONICAL_CLOSED_STATUSES = {
     "supprimee",
 }
 
+RAW_CSV_ENCODING = "utf-16"
 
 def _empty_object_series(index: pd.Index | None = None) -> pd.Series:
     return pd.Series(index=index, dtype="object")
-
 
 def maybe_fix_mojibake(value: object) -> object:
     if not isinstance(value, str):
         return value
 
-    # Clean extra whitespace first.
+    # Collapsing extra whitespace before attempting any encoding repair
     text = " ".join(value.strip().split())
     if not text:
         return ""
-
-    # Try to repair a few common encoding glitches.
+    # repairing mojibake from UTF-8 text decoded as latin1
     if any(token in text for token in ("Ã", "Â", "â", "�")):
         try:
             repaired = text.encode("latin1").decode("utf-8")
@@ -78,32 +76,44 @@ def maybe_fix_mojibake(value: object) -> object:
 def fold_text(value: object) -> str:
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return ""
-
-    # Fold text to lowercase ASCII so labels are easier to match consistently.
+    # Normalizing to lowercase ASCII for label cleanup
     text = str(maybe_fix_mojibake(value))
     normalized = unicodedata.normalize("NFKD", text)
     ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
     return " ".join(ascii_text.lower().split())
 
-
 def canonicalize_nature(value: object) -> str | None:
-    # Map raw labels into the smaller cleaned set used later.
+    # Mapping cleaned labels into controlled set used by classifier
     folded = fold_text(value)
     return CANONICAL_NATURES.get(folded)
 
+def read_raw_csv_kwargs() -> dict[str, object]:
+    """Return the shared pandas CSV options for the raw Montreal 311 file."""
+    return {
+        "low_memory": False,
+        "encoding": RAW_CSV_ENCODING,
+        "encoding_errors": "replace",
+    }
+
+def read_csv_kwargs(csv_path: Path | str) -> dict[str, object]:
+    """Return pandas CSV options for either the raw file or processed samples."""
+    path = Path(csv_path)
+    if path.suffix == ".gz":
+        return {
+            "low_memory": False,
+        }
+    return read_raw_csv_kwargs()
 
 def load_requests(csv_path: Path | str, nrows: int | None = None) -> pd.DataFrame:
-    # Replace bad characters instead of failing on a few broken rows.
+    """Load the raw Montreal 311 CSV using the shared file settings."""
     return pd.read_csv(
         csv_path,
-        low_memory=False,
         nrows=nrows,
-        encoding_errors="replace",
+        **read_csv_kwargs(csv_path),
     )
 
-
 def parse_mixed_datetime(series: pd.Series) -> pd.Series:
-    # The file uses more than one datetime format.
+    # The source file mixes ISO-style strings with slash-delimited timestamps
     parsed = pd.to_datetime(series, format="ISO8601", errors="coerce")
     missing_mask = parsed.isna() & series.notna()
     if missing_mask.any():
@@ -114,28 +124,27 @@ def parse_mixed_datetime(series: pd.Series) -> pd.Series:
         )
     return parsed
 
-
 def prepare_base_frame(df: pd.DataFrame) -> pd.DataFrame:
-    # Shared cleaned dataframe used by both tasks.
+    # Shared cleaned dataframe used by both downstream tasks
     prepared = df.copy()
 
-    # Clean text-like columns first.
+    # Cleaninig free-text and categorical columns befor normalization.
     for column in STRING_COLUMNS:
         if column in prepared.columns:
             prepared[column] = prepared[column].map(maybe_fix_mojibake)
 
-    # Convert numeric fields and let invalid values become NaN.
+    # Forced provenance and location fields to numeric (for NaN)
     for column in PROVENANCE_COLUMNS + LOCATION_COLUMNS:
         if column in prepared.columns:
             prepared[column] = pd.to_numeric(prepared[column], errors="coerce")
 
-    # Parse the timestamps needed later for splitting and targets.
+    # Parsing timestamps for time-based splitting and resolution-time targets
     creation_source = prepared.get("DDS_DATE_CREATION", _empty_object_series(prepared.index))
     last_status_source = prepared.get("DATE_DERNIER_STATUT", _empty_object_series(prepared.index))
     prepared["creation_ts"] = parse_mixed_datetime(creation_source)
     prepared["last_status_ts"] = parse_mixed_datetime(last_status_source)
 
-    # Build cleaned helper columns once so both tasks can reuse them.
+    # Creating normalized target/helper columns
     prepared["NATURE_TARGET"] = (
         prepared["NATURE"].map(canonicalize_nature)
         if "NATURE" in prepared.columns
@@ -151,7 +160,7 @@ def prepare_base_frame(df: pd.DataFrame) -> pd.DataFrame:
     else:
         prepared["ACTI_NOM"] = ""
 
-    # These features are safe because they only use the creation timestamp.
+    # Time-derived features that depend only on request creation time
     prepared["creation_year"] = prepared["creation_ts"].dt.year
     prepared["creation_month"] = prepared["creation_ts"].dt.month
     prepared["creation_dayofweek"] = prepared["creation_ts"].dt.dayofweek
@@ -163,31 +172,28 @@ def prepare_base_frame(df: pd.DataFrame) -> pd.DataFrame:
     )
     return prepared
 
-
 def prepare_classification_frame(df: pd.DataFrame) -> pd.DataFrame:
-    # Classification needs a valid timestamp and a valid cleaned label.
+    # Valid creation timestamp and a normalized request type for classification
     prepared = prepare_base_frame(df)
-    # Rows missing either field cannot be used for supervised learning.
+    # Drop rows missing fields bc they cannot contribute a supervised classification label
     prepared = prepared.dropna(subset=["creation_ts", "NATURE_TARGET"]).copy()
     return prepared
 
-
 def prepare_regression_frame(df: pd.DataFrame) -> pd.DataFrame:
-    # Regression needs both timestamps and a closed-like final status.
+    # Restricting regression to requests with usable closing timestamp and closed status
     prepared = prepare_base_frame(df)
     prepared = prepared.dropna(subset=["creation_ts", "last_status_ts"]).copy()
 
-    # Keep only requests that were actually closed.
+    # Keep only closed requests for resolution time prediction
     prepared = prepared.loc[
         prepared["FINAL_STATUS_FOLDED"].isin(CANONICAL_CLOSED_STATUSES)
     ].copy()
-
-    # Resolution time in days is the regression target.
+    # Resolution time in days derived from timestamps (regression target)
     prepared["resolution_time_days"] = (
         prepared["last_status_ts"] - prepared["creation_ts"]
     ).dt.total_seconds() / 86400.0
 
-    # Drop invalid durations.
+    # excluding negative or missing duration
     prepared = prepared.loc[
         prepared["resolution_time_days"].notna()
         & (prepared["resolution_time_days"] >= 0)
