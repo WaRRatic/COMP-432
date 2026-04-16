@@ -43,10 +43,10 @@ CANONICAL_NATURES = {
 }
 
 CANONICAL_CLOSED_STATUSES = {
-    "terminee",
-    "refusee",
-    "annulee",
-    "supprimee",
+    "termine",
+    "refuse",
+    "annule",
+    "supprime",
 }
 
 RAW_CSV_ENCODING = "utf-16"

@@ -94,6 +94,62 @@ def regression_metrics(
         "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
     }
     return metrics
+
+def split_conformal_interval_radius(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    alpha: float = 0.1,
+) -> float:
+    """Estimate one split-conformal interval radius from calibration errors."""
+    if not 0.0 < alpha < 1.0:
+        raise ValueError("alpha must be between 0 and 1.")
+    errors = np.abs(y_true.to_numpy(dtype=float) - np.asarray(y_pred, dtype=float))
+    if errors.size == 0:
+        raise ValueError("Calibration errors are required to build conformal intervals.")
+    sorted_errors = np.sort(errors)
+    rank = int(np.ceil((sorted_errors.size + 1) * (1.0 - alpha))) - 1
+    rank = min(max(rank, 0), sorted_errors.size - 1)
+    return float(sorted_errors[rank])
+
+def regression_interval_metrics(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    interval_radius: float,
+) -> dict[str, float]:
+    """Summarize empirical coverage and interval width for regression predictions."""
+    predictions = np.asarray(y_pred, dtype=float)
+    lower_bound = predictions - interval_radius
+    upper_bound = predictions + interval_radius
+    targets = y_true.to_numpy(dtype=float)
+    covered = (targets >= lower_bound) & (targets <= upper_bound)
+    interval_width = upper_bound - lower_bound
+    return {
+        "coverage": float(np.mean(covered)),
+        "mean_interval_width": float(np.mean(interval_width)),
+        "median_interval_width": float(np.median(interval_width)),
+    }
+
+def regression_interval_table(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    interval_radius: float,
+) -> pd.DataFrame:
+    """Build a small table with prediction intervals for regression outputs."""
+    predictions = np.asarray(y_pred, dtype=float)
+    lower_bound = predictions - interval_radius
+    upper_bound = predictions + interval_radius
+    targets = y_true.to_numpy(dtype=float)
+    covered = (targets >= lower_bound) & (targets <= upper_bound)
+    return pd.DataFrame(
+        {
+            "actual": targets,
+            "prediction": predictions,
+            "lower_bound": lower_bound,
+            "upper_bound": upper_bound,
+            "covered": covered,
+        }
+    )
+
 # confidence versus observed accuracy summary table for pred prob
 def confidence_reliability_table(
     y_true: pd.Series,
