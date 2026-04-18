@@ -1,3 +1,5 @@
+"""Script for training the Montreal 311 classification baselines."""
+
 from __future__ import annotations
 import argparse
 import sys
@@ -9,8 +11,8 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 SRC_DIR = PROJECT_ROOT / "src"
-# Add Project/src to Python's import path to import
-# montreal311_project.* when run directly from the command line
+# Add Project/src to Python's import path so the package can be imported
+# when this script is run directly
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
@@ -38,12 +40,14 @@ from montreal311_project.paths import OUTPUTS_DIR, PROCESSED_DATA_DIR
 from montreal311_project.splits import split_by_time
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for classification training.
-    Args:
-        None.
+    """Collect the settings used for a classification training run.
+
+    The script reads the subset path, output folder, split boundaries, and an
+    optional row cap from these arguments so the same experiment can be rerun
+    later with the same setup.
     Returns:
-        argparse.Namespace: Parsed options for input data, output directory,
-        split dates, and optional row limit.
+        argparse.Namespace: Parsed input path, output path, split dates, and
+        optional row limit.
     Example:
         >>> args = parse_args()
     """
@@ -72,6 +76,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     """Train, compare, and save the current classification baselines.
+
+    This function loads the prepared subset, applies the chronological split,
+    compares the baseline classifiers on the validation window, then retrains
+    the best one and saves the final test-time artifacts for reporting.
     Args:
         None.
     Returns:
@@ -81,6 +89,7 @@ def main() -> None:
         >>> main()
     """
     args = parse_args()
+    analysis_dir = OUTPUTS_DIR / "analysis"
     if not args.input.exists():
         raise FileNotFoundError(f"Input subset not found: {args.input}")
 
@@ -148,6 +157,7 @@ def main() -> None:
     if "validation_macro_f1" in comparison.columns:
         comparison = comparison.sort_values("validation_macro_f1", ascending=False)
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
     comparison.to_csv(args.output_dir / "model_comparison.csv", index=False)
     if best_name is None:
         raise RuntimeError("No classification model trained successfully. Check model_comparison.csv for details.")
@@ -197,6 +207,7 @@ def main() -> None:
         final_labels,
     )
     class_report.to_csv(args.output_dir / "best_model_class_report.csv", index=False)
+    class_report.to_csv(analysis_dir / "classification_by_class.csv", index=False)
 
     confusion_table = confusion_matrix_table(
         test["NATURE_TARGET"],
@@ -212,6 +223,7 @@ def main() -> None:
         final_labels,
     )
     by_month.to_csv(args.output_dir / "best_model_by_month.csv", index=False)
+    by_month.to_csv(analysis_dir / "classification_by_month.csv", index=False)
 
     by_borough = grouped_classification_metrics_table(
         test["ARRONDISSEMENT"],
@@ -220,6 +232,7 @@ def main() -> None:
         final_labels,
     )
     by_borough.to_csv(args.output_dir / "best_model_by_borough.csv", index=False)
+    by_borough.to_csv(analysis_dir / "classification_by_borough.csv", index=False)
 
     if final_test_proba is not None:
         # Saving a reliability artifact for the best classifier

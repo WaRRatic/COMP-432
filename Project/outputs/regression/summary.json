@@ -1,0 +1,21 @@
+{
+  "best_model": "conditional_median_lookup",
+  "train_rows": 98837,
+  "validation_rows": 24065,
+  "test_rows": 24019,
+  "final_test_metrics": {
+    "mae": 42.294247440635345,
+    "rmse": 123.3247865617136
+  },
+  "conformal_interval": {
+    "alpha": 0.1,
+    "nominal_coverage": 0.9,
+    "calibration_rows": 24065,
+    "interval_radius_days": 120.5487037037037,
+    "test_metrics": {
+      "coverage": 0.8999958366293351,
+      "mean_interval_width": 241.0974074074074,
+      "median_interval_width": 241.0974074074074
+    }
+  }
+}

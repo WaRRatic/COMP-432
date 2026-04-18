@@ -1,0 +1,5 @@
+model,feature_view,error,validation_mae,validation_rmse
+conditional_median_lookup,activity_borough_lookup,,46.0071564851848,141.20660010342218
+ridge_sparse_combined,text_categorical_numeric,,46.03370213956688,148.06429245296306
+elasticnet_sparse_combined,text_categorical_numeric,,46.75068824871403,150.16757644164707
+dummy_mean,all_features_ignored,,73.39405044236528,152.75081807250987

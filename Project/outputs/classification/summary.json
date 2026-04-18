@@ -1,0 +1,19 @@
+{
+  "best_model": "linear_svc_calibrated_sparse",
+  "labels": [
+    "Commentaire",
+    "Information",
+    "Plainte",
+    "Requete"
+  ],
+  "train_rows": 202500,
+  "validation_rows": 51428,
+  "test_rows": 46072,
+  "final_test_metrics": {
+    "accuracy": 0.9854358395554784,
+    "macro_f1": 0.5046671255037745,
+    "macro_precision": 0.7180949697097425,
+    "macro_recall": 0.5040708243239399,
+    "multiclass_brier": 0.027112430839724293
+  }
+}

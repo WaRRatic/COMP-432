@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -14,7 +12,6 @@ if str(SRC_DIR) not in sys.path:
 
 from montreal311_project.paths import PROCESSED_DATA_DIR, RAW_DATA_PATH
 from montreal311_project.sampling import build_representative_subset_from_csv, save_subset
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the representative Montreal 311 subset.")
@@ -42,7 +39,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def main() -> None:
     args = parse_args()
 
@@ -60,7 +56,6 @@ def main() -> None:
     save_subset(subset, args.output, metadata)
 
     print(f"Saved {len(subset):,} rows to {args.output}")
-
 
 if __name__ == "__main__":
     main()
