@@ -1,3 +1,9 @@
+"""Building and saving the representative Montreal 311 subset.
+
+This script reads the raw Montreal 311 CSV, samples a representative subset,
+and saves both: sampled rows and the sampling metadata used by the project.
+"""
+
 from __future__ import annotations
 import argparse
 import sys
@@ -14,6 +20,17 @@ from montreal311_project.paths import PROCESSED_DATA_DIR, RAW_DATA_PATH
 from montreal311_project.sampling import build_representative_subset_from_csv, save_subset
 
 def parse_args() -> argparse.Namespace:
+    """Collecting the settings used to build the representative subset.
+
+    The script reads the input path, output path, target sample size, and
+    optional debug settings from these arguments so the same subset can be
+    rebuilt later with the same setup.
+    Returns:
+        argparse.Namespace: Parsed input path, output path, sampling size, and
+        optional debug settings.
+    Example:
+        >>> args = parse_args()
+    """
     parser = argparse.ArgumentParser(description="Build the representative Montreal 311 subset.")
     parser.add_argument(
         "--input",
@@ -40,6 +57,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def main() -> None:
+    """Builds the subset and saves the sampled data plus metadata.
+
+    This fn loads the raw Montreal 311 data, creates the representative
+    sample with the requested settings, and writes the output files used by the
+    rest of the project.
+    Args:
+        None.
+    Returns:
+        None. The function saves the sampled subset and metadata to disk.
+    Example:
+        >>> main()
+    """
     args = parse_args()
 
     if not args.input.exists():

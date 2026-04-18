@@ -1,3 +1,9 @@
+"""Build the feature preprocessing steps used by the project models.
+
+This module defines the text, categorical, and numeric preprocessing pipelines
+used for the classification and regression baselines.
+"""
+
 from __future__ import annotations
 import numpy as np
 import pandas as pd

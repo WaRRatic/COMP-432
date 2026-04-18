@@ -1,3 +1,5 @@
+"""Store the main file and folder paths used across the project."""
+
 from pathlib import Path
 
 

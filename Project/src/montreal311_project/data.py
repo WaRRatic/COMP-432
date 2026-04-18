@@ -1,3 +1,8 @@
+"""Loading and cleaning the Montreal 311 data used by the project.
+
+This module handles shared data for both classification and regression tasks.
+"""
+
 from __future__ import annotations
 import unicodedata
 from pathlib import Path
@@ -55,6 +60,11 @@ def _empty_object_series(index: pd.Index | None = None) -> pd.Series:
     return pd.Series(index=index, dtype="object")
 
 def maybe_fix_mojibake(value: object) -> object:
+    """Cleans text values and tries to repair simple encoding problems.
+
+    This helper only handles string values, removes extra whitespace,
+    and fixes common mojibake patterns that appear in the raw dataset.
+    """
     if not isinstance(value, str):
         return value
 
@@ -74,6 +84,11 @@ def maybe_fix_mojibake(value: object) -> object:
     return text
 
 def fold_text(value: object) -> str:
+    """Normalizes a value into lowercase ASCII text.
+
+    This used to make text labels more consistent before matching or
+    cleaning them.
+    """
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return ""
     # Normalizing to lowercase ASCII for label cleanup
@@ -83,6 +98,7 @@ def fold_text(value: object) -> str:
     return " ".join(ascii_text.lower().split())
 
 def canonicalize_nature(value: object) -> str | None:
+    """Maps a raw nature label into the small target set used in the project."""
     # Mapping cleaned labels into controlled set used by classifier
     folded = fold_text(value)
     return CANONICAL_NATURES.get(folded)
@@ -113,6 +129,12 @@ def load_requests(csv_path: Path | str, nrows: int | None = None) -> pd.DataFram
     )
 
 def parse_mixed_datetime(series: pd.Series) -> pd.Series:
+    """Parses datetime values from the mixed formats used in the source data.
+
+    The raw file contains more than one timestamp format, so this tries
+    the main format first and then fills the remaining missing values with a
+    second format.
+    """
     # The source file mixes ISO-style strings with slash-delimited timestamps
     parsed = pd.to_datetime(series, format="ISO8601", errors="coerce")
     missing_mask = parsed.isna() & series.notna()
@@ -125,6 +147,12 @@ def parse_mixed_datetime(series: pd.Series) -> pd.Series:
     return parsed
 
 def prepare_base_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Builds the shared cleaned dataframe used by both prediction tasks.
+
+    This fn fixes text issues, parses timestamps, creates normalized
+    helper columns, and adds simple creation-time features used later in the
+    project.
+    """
     # Shared cleaned dataframe used by both downstream tasks
     prepared = df.copy()
 
@@ -173,6 +201,11 @@ def prepare_base_frame(df: pd.DataFrame) -> pd.DataFrame:
     return prepared
 
 def prepare_classification_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Returns the cleaned dataframe ready for classification training.
+
+    This version keeps only rows with a valid creation timestamp and a usable
+    normalized class label.
+    """
     # Valid creation timestamp and a normalized request type for classification
     prepared = prepare_base_frame(df)
     # Drop rows missing fields bc they cannot contribute a supervised classification label
@@ -180,6 +213,11 @@ def prepare_classification_frame(df: pd.DataFrame) -> pd.DataFrame:
     return prepared
 
 def prepare_regression_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Returns the cleaned dataframe ready for regression training.
+
+    This version keeps only closed requests with valid timestamps and a
+    non-negative resolution time in days.
+    """
     # Restricting regression to requests with usable closing timestamp and closed status
     prepared = prepare_base_frame(df)
     prepared = prepared.dropna(subset=["creation_ts", "last_status_ts"]).copy()

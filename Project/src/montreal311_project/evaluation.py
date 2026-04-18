@@ -1,3 +1,9 @@
+"""Compute and save the evaluation outputs used in the project.
+
+This module contains the metric helpers, summary tables, and small reporting
+utilities used by the training scripts.
+"""
+
 from __future__ import annotations
 import json
 from pathlib import Path

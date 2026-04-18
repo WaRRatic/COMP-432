@@ -1,3 +1,9 @@
+"""Define the baseline models used in the Montreal 311 project.
+
+This module contains the model specifications and helper builders for the
+classification and regression experiments.
+"""
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable

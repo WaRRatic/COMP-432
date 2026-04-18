@@ -1,3 +1,9 @@
+"""Builds and saves the representative subset used by the project.
+
+Handles the sampling logic for creating a smaller Montreal 311
+dataset that still keeps the main month and request-type structure.
+"""
+
 from __future__ import annotations
 import heapq
 import json
@@ -12,6 +18,10 @@ def _trim_chunk_for_debug(
     rows_processed: int,
     max_rows: int | None,
 ) -> pd.DataFrame | None:
+    """Triming a chunk when a small debug row limit is being used.
+
+    This helper keeps the normal chunk unchanged unless you set `max_rows` for a test run.
+    """
     if max_rows is None:
         return chunk
 
@@ -23,6 +33,11 @@ def _trim_chunk_for_debug(
     return chunk
 
 def _prepare_sampling_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
+    """Adds grouping fields used for sampling.
+
+    This is prepared with the shared data cleaning logic, filtered to rows
+    with usable time and target values, and given a month key for grouping.
+    """
     prepared = prepare_base_frame(chunk)
     prepared = prepared.dropna(subset=["creation_ts", "NATURE_TARGET"]).copy()
     prepared["sample_month"] = prepared["creation_ts"].dt.to_period("M").astype(str)
@@ -33,6 +48,11 @@ def _allocate_group_quotas(
     target_rows: int,
     min_per_group: int,
 ) -> pd.Series:
+    """Decides how many rows to sample from each month and nature group to create a subset.
+
+    The quotas try to stay close to the original distribution while still
+    giving small groups a minimum number of rows when possible.
+    """
     # Removes empty groups and caps the requested sample size to available data
     counts = counts[counts > 0].sort_values(ascending=False)
     target_rows = min(int(target_rows), int(counts.sum()))
@@ -84,6 +104,11 @@ def save_subset(
     output_path: Path,
     metadata: dict[str, object],
 ) -> None:
+    """Saving the sampled subset and its metadata to disk.
+
+    This writes the sampled rows as a compressed CSV and stores the sampling
+    metadata in a matching JSON file.
+    """
     # Saving sampled rows and metadata to reproduce sampling decisions
     output_path.parent.mkdir(parents=True, exist_ok=True)
     subset.to_csv(output_path, index=False, compression="gzip")
